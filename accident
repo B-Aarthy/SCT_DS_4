@@ -1,0 +1,106 @@
+!pip install folium seaborn
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import folium
+
+from google.colab import files
+print("Upload your Traffic Accident CSV file")
+uploaded = files.upload()
+
+file_name = list(uploaded.keys())[0]
+df = pd.read_csv(file_name)
+
+print("\nDataset Loaded Successfully!")
+print(df.head())
+print("\nColumns:\n", df.columns)
+
+df.columns = df.columns.str.strip().str.lower()
+rename_map = {
+    'weather_condition': 'weather',
+    'road_condition': 'road',
+    'crash_time': 'time',
+    'accident_time': 'time',
+    'latitude': 'lat',
+    'longitude': 'lon'
+}
+df.rename(columns=rename_map, inplace=True)
+
+# Drop rows with missing critical values
+df.dropna(subset=['lat', 'lon'], inplace=True)
+
+if 'time' in df.columns:
+    df['time'] = pd.to_datetime(df['time'], errors='coerce')
+    df['hour'] = df['time'].dt.hour
+
+    def time_category(hour):
+        if 5 <= hour < 12:
+            return 'Morning'
+        elif 12 <= hour < 17:
+            return 'Afternoon'
+        elif 17 <= hour < 21:
+            return 'Evening'
+        else:
+            return 'Night'
+
+    df['time_of_day'] = df['hour'].apply(time_category)
+
+    plt.figure(figsize=(7,5))
+    sns.countplot(x='time_of_day', data=df)
+    plt.title("Accidents by Time of Day")
+    plt.show()
+
+if 'weather' in df.columns:
+    plt.figure(figsize=(10,5))
+    df['weather'].value_counts().head(10).plot(kind='bar')
+    plt.title("Accidents by Weather Condition")
+    plt.xlabel("Weather")
+    plt.ylabel("Number of Accidents")
+    plt.show()
+
+if 'road' in df.columns:
+    plt.figure(figsize=(10,5))
+    df['road'].value_counts().head(10).plot(kind='bar', color='orange')
+    plt.title("Accidents by Road Condition")
+    plt.xlabel("Road Condition")
+    plt.ylabel("Number of Accidents")
+    plt.show()
+
+print("Creating Accident Hotspot Map...")
+
+map_center = [df['lat'].mean(), df['lon'].mean()]
+accident_map = folium.Map(location=map_center, zoom_start=10)
+
+for _, row in df.sample(min(1000, len(df))).iterrows():
+    folium.CircleMarker(
+        location=[row['lat'], row['lon']],
+        radius=3,
+        color='red',
+        fill=True,
+        fill_opacity=0.6
+    ).add_to(accident_map)
+
+accident_map
+
+if 'time_of_day' in df.columns and 'weather' in df.columns:
+    heat_data = pd.crosstab(df['time_of_day'], df['weather'])
+
+    plt.figure(figsize=(12,6))
+    sns.heatmap(heat_data, cmap='Reds')
+    plt.title("Accidents Heatmap: Time of Day vs Weather")
+    plt.show()
+
+print("\n--- KEY INSIGHTS ---")
+print("Top Weather Conditions:")
+if 'weather' in df.columns:
+    print(df['weather'].value_counts().head(3))
+
+print("\nTop Road Conditions:")
+if 'road' in df.columns:
+    print(df['road'].value_counts().head(3))
+
+print("\nTime of Day Distribution:")
+if 'time_of_day' in df.columns:
+    print(df['time_of_day'].value_counts())
